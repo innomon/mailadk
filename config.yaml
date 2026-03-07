@@ -1,0 +1,13 @@
+imap:
+  host: "imap.example.com:993"
+  user: "user@example.com"
+  pass: "your-password"
+  subject: "Identity Verification"
+
+auth:
+  spa_public_key: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+  verifier_private_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+
+app:
+  spa_callback_url: "https://spa.example.com/auth/callback"
+  poll_interval: 30s

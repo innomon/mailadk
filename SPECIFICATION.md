@@ -14,7 +14,11 @@ mailadk is a Go-based service that acts as an identity bridge between email and 
 - **Language**: Go 1.22+
 - **IMAP Library**: github.com/emersion/go-imap/v2 (for modern, performant email retrieval).
 - **JWT Library**: github.com/golang-jwt/jwt/v5
-- **Configuration**: Environment variables or a .env file.
+- **Configuration**: Priority-based loading:
+  1. Environment variables (prefixed with `MAILADK_`).
+  2. `config.yaml` in the root or `./config/` directory.
+  3. `.env` file for local development.
+  4. Default values (e.g., `poll_interval: 30s`).
 
 ## 4. Authentication & Security
 - **Inbound JWT Verification**: mailadk must verify the SPA's signature. This requires the SPA's public key.
