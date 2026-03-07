@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"strings"
 	"time"
@@ -36,7 +35,9 @@ func NewPoller(host, user, pass, subject string) *Poller {
 }
 
 func (p *Poller) Poll(ctx context.Context, callback func(msg *Message) error) error {
-	c, err := imapclient.DialTLS(p.host, &tls.Config{InsecureSkipVerify: false})
+	c, err := imapclient.DialTLS(p.host, &imapclient.Options{
+		TLSConfig: &tls.Config{InsecureSkipVerify: false},
+	})
 	if err != nil {
 		return fmt.Errorf("failed to dial IMAP: %w", err)
 	}
@@ -53,38 +54,31 @@ func (p *Poller) Poll(ctx context.Context, callback func(msg *Message) error) er
 
 	// Search for messages with the given subject
 	searchData, err := c.Search(&imap.SearchCriteria{
-		Header: []imap.HeaderCriterion{{Key: "Subject", Value: p.subject}},
+		Header: []imap.SearchCriteriaHeaderField{{Key: "Subject", Value: p.subject}},
 	}, nil).Wait()
 	if err != nil {
 		return fmt.Errorf("failed to search: %w", err)
 	}
 
-	if len(searchData.AllUIDs()) == 0 {
+	if searchData.All == nil {
 		return nil
 	}
 
 	// Fetch messages
 	fetchOptions := &imap.FetchOptions{
 		Envelope: true,
+		UID:      true,
 		BodySection: []*imap.FetchItemBodySection{
 			{Specifier: imap.PartSpecifierText}, // Fetch the text part
 		},
 	}
 
-	fetchCmd := c.Fetch(searchData.AllUIDs(), fetchOptions)
-	defer fetchCmd.Close()
+	messages, err := c.Fetch(searchData.All, fetchOptions).Collect()
+	if err != nil {
+		return fmt.Errorf("failed to fetch messages: %w", err)
+	}
 
-	for {
-		msg := fetchCmd.Next()
-		if msg == nil {
-			break
-		}
-
-		metadata := msg.Wait()
-		if metadata == nil {
-			continue
-		}
-
+	for _, metadata := range messages {
 		// Extract From address
 		from := ""
 		if metadata.Envelope != nil && len(metadata.Envelope.From) > 0 {
@@ -95,23 +89,17 @@ func (p *Poller) Poll(ctx context.Context, callback func(msg *Message) error) er
 		// Extract body and find auth JSON
 		var authJWT string
 		for _, body := range metadata.BodySection {
-			bodyData, err := io.ReadAll(body)
-			if err != nil {
-				log.Printf("failed to read body for message %v: %v", metadata.UID, err)
-				continue
-			}
+			bodyData := body.Bytes
 
 			// Parse JSON: {"auth": "..."}
 			var payload struct {
 				Auth string `json:"auth"`
 			}
 			// The body might contain more than just JSON (e.g. if it's multipart)
-			// For now, let's assume it's just the JSON or try to find it.
 			if err := json.Unmarshal(bodyData, &payload); err == nil {
 				authJWT = payload.Auth
 			} else {
 				// Try a more robust approach if it's not pure JSON
-				// This is a simple fallback: find the first { and last }
 				start := strings.Index(string(bodyData), "{")
 				end := strings.LastIndex(string(bodyData), "}")
 				if start != -1 && end != -1 && end > start {
@@ -129,12 +117,11 @@ func (p *Poller) Poll(ctx context.Context, callback func(msg *Message) error) er
 		if from != "" && authJWT != "" {
 			if err := callback(&Message{From: from, AuthJWT: authJWT}); err == nil {
 				// Mark as seen/deleted if callback succeeded
-				// For now let's mark as Seen.
-				flagsCmd := c.Store(imap.UIDSetNum(metadata.UID), &imap.StoreFlags{
+				storeFlags := &imap.StoreFlags{
 					Op:    imap.StoreFlagsAdd,
 					Flags: []imap.Flag{imap.FlagSeen, imap.FlagDeleted},
-				}, nil)
-				if err := flagsCmd.Close(); err != nil {
+				}
+				if err := c.Store(imap.UIDSetNum(metadata.UID), storeFlags, nil).Close(); err != nil {
 					log.Printf("failed to mark message %v as seen/deleted: %v", metadata.UID, err)
 				}
 			}
