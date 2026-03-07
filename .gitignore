@@ -1,11 +1,14 @@
 # Binaries
 /mailadk
+/mail-puller
 
 # Environment variables
 .env
 
-# Configuration (keep yaml if it's for defaults, but often better to ignore if it contains secrets)
-# config.yaml
+# Data and State
+data/
+*.json
+!config.yaml
 
 # IDEs
 .vscode/

@@ -11,3 +11,10 @@ auth:
 app:
   spa_callback_url: "https://spa.example.com/auth/callback"
   poll_interval: 30s
+
+puller:
+  start_date: "2026-03-01"
+  state_file: "./data/state.json"
+  mcp_command: "go run /home/innomon/orez/dyna-slm/cmd/mcp-server/main.go"
+  mcp_model: "dyna-gemma3-270m"
+  temp_dir: "./data/temp"

@@ -52,9 +52,12 @@ func (p *Poller) Poll(ctx context.Context, callback func(msg *Message) error) er
 		return fmt.Errorf("failed to select INBOX: %w", err)
 	}
 
-	// Search for messages with the given subject
+	// Search for messages with the given subject that are UNSEEN
+	// and arrived since yesterday (as a safety window).
 	searchData, err := c.Search(&imap.SearchCriteria{
-		Header: []imap.SearchCriteriaHeaderField{{Key: "Subject", Value: p.subject}},
+		Header:  []imap.SearchCriteriaHeaderField{{Key: "Subject", Value: p.subject}},
+		NotFlag: []imap.Flag{imap.FlagSeen},
+		Since:   time.Now().Add(-24 * time.Hour),
 	}, nil).Wait()
 	if err != nil {
 		return fmt.Errorf("failed to search: %w", err)
@@ -134,6 +137,74 @@ func (p *Poller) Poll(ctx context.Context, callback func(msg *Message) error) er
 	}
 
 	return nil
+}
+
+func (p *Poller) FetchSince(ctx context.Context, since time.Time, callback func(uid uint32, from string, subject string, body []byte) error) (time.Time, error) {
+	c, err := imapclient.DialTLS(p.host, &imapclient.Options{
+		TLSConfig: &tls.Config{InsecureSkipVerify: false},
+	})
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to dial IMAP: %w", err)
+	}
+	defer c.Logout()
+
+	if err := c.Login(p.user, p.pass).Wait(); err != nil {
+		return time.Time{}, fmt.Errorf("failed to login: %w", err)
+	}
+
+	if _, err := c.Select("INBOX", nil).Wait(); err != nil {
+		return time.Time{}, fmt.Errorf("failed to select INBOX: %w", err)
+	}
+
+	searchData, err := c.Search(&imap.SearchCriteria{
+		Since: since,
+	}, nil).Wait()
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to search: %w", err)
+	}
+
+	if searchData.All == nil {
+		return since, nil
+	}
+
+	fetchOptions := &imap.FetchOptions{
+		Envelope: true,
+		UID:      true,
+		BodySection: []*imap.FetchItemBodySection{
+			{Specifier: imap.PartSpecifierText},
+		},
+	}
+
+	messages, err := c.Fetch(searchData.All, fetchOptions).Collect()
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to fetch: %w", err)
+	}
+
+	latest := since
+	for _, m := range messages {
+		from := ""
+		if m.Envelope != nil && len(m.Envelope.From) > 0 {
+			f := m.Envelope.From[0]
+			from = fmt.Sprintf("%s@%s", f.Mailbox, f.Host)
+		}
+
+		body := []byte("")
+		if len(m.BodySection) > 0 {
+			body = m.BodySection[0].Bytes
+		}
+
+		if err := callback(uint32(m.UID), from, m.Envelope.Subject, body); err != nil {
+			log.Printf("Callback error for UID %v: %v", m.UID, err)
+			continue
+		}
+
+		// Update latest timestamp based on Envelope date if available, or just use now
+		if m.Envelope != nil && m.Envelope.Date.After(latest) {
+			latest = m.Envelope.Date
+		}
+	}
+
+	return latest, nil
 }
 
 func (p *Poller) Run(ctx context.Context, interval time.Duration, callback func(msg *Message) error) {

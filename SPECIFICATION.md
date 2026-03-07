@@ -29,12 +29,19 @@ mailadk is a Go-based service that acts as an identity bridge between email and 
   - sub: lip_id:email
   - iat, exp: Standard claims.
 
-## 5. Flow
-1. **Connect**: Use imapclient.DialTLS to connect to the mail server.
-2. **Poll**: Every N seconds, fetch messages from the INBOX with the configured subject.
-3. **Parse**:
-   - Extract the From header to get the email address.
-   - Parse the body for the {"auth": "..."} JSON.
-4. **Verify**: Decode Base32 and verify the signature of the SPA-generated JWT.
-5. **Post**: Use net/http to send a JSON payload {"token": "..."} to the SPA callback URL.
-6. **Cleanup**: Mark the email as Deleted or Seen to avoid re-processing.
+## 6. Utilities
+### 6.1. mail-puller
+A command-line utility designed to fetch emails and ingest them into the Dyna-SLM RAG store via its MCP server.
+
+- **Stateful Fetching**: 
+  - First run: Fetches messages from a configured `start_date` until the current time.
+  - Subsequent runs: Only fetches messages received after the `last_fetched_time` stored in a state file.
+- **MCP Ingestion**:
+  - Acts as an MCP client to the `dyna-slm` MCP server.
+  - For each fetched email, it invokes the `ingest_asset` tool.
+  - Pass the local path of a temporary file containing the email content.
+- **Configuration**: Managed via `config.yaml` or environment variables. Includes MCP server command and model variant.
+
+## 7. Technology Stack (Extended)
+- **State Management**: Local JSON or TOML file for tracking sync progress.
+- **Filesystem**: Standard Go `os` and `path/filepath` packages.

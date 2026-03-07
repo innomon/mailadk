@@ -30,3 +30,11 @@
 - [x] Ensure the SPA callback is accessible.
 - [x] Mark processed emails as Deleted or Seen to keep the inbox clean.
 - [x] Add graceful shutdown and logging.
+
+## Phase 5: mail-puller Utility (MCP Integration)
+- [x] Add `Puller` configuration (start_date, mcp_command, mcp_model, state_file).
+- [x] Implement state management (last_fetched_time persistence).
+- [x] Implement IMAP fetching for specific time ranges.
+- [ ] Implement MCP Client logic to call `ingest_asset`.
+- [ ] Implement temporary file handling for ingestion.
+- [ ] Update `cmd/mail-puller/main.go` to use MCP client.

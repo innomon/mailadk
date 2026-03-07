@@ -26,6 +26,14 @@ type Config struct {
 		SPACallbackURL string        `mapstructure:"spa_callback_url"`
 		PollInterval   time.Duration `mapstructure:"poll_interval"`
 	} `mapstructure:"app"`
+
+	Puller struct {
+		StartDate   string `mapstructure:"start_date"`
+		StateFile   string `mapstructure:"state_file"`
+		MCPCommand  string `mapstructure:"mcp_command"`
+		MCPModel    string `mapstructure:"mcp_model"`
+		TempDir     string `mapstructure:"temp_dir"`
+	} `mapstructure:"puller"`
 }
 
 func Load() (*Config, error) {
@@ -61,6 +69,11 @@ func Load() (*Config, error) {
 	v.BindEnv("auth.verifier_private_key", "MAILADK_VERIFIER_PRIVATE_KEY")
 	v.BindEnv("app.spa_callback_url", "MAILADK_SPA_CALLBACK_URL")
 	v.BindEnv("app.poll_interval", "MAILADK_POLL_INTERVAL")
+	v.BindEnv("puller.start_date", "MAILADK_PULLER_START_DATE")
+	v.BindEnv("puller.state_file", "MAILADK_PULLER_STATE_FILE")
+	v.BindEnv("puller.mcp_command", "MAILADK_PULLER_MCP_COMMAND")
+	v.BindEnv("puller.mcp_model", "MAILADK_PULLER_MCP_MODEL")
+	v.BindEnv("puller.temp_dir", "MAILADK_PULLER_TEMP_DIR")
 
 	// Read config file
 	if err := v.ReadInConfig(); err != nil {
